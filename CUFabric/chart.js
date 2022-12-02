@@ -15,9 +15,18 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
-import {Colors} from 'react-native/Libraries/NewAppScreen';
 import {LineChart} from 'react-native-chart-kit';
 
+/**
+ * React-component to wrap the line graph ... this was in App.js before, but
+ * App.js's purpose is to render the BLEContext's provider and nest children inside of it ...
+ * I don't actualy have access to the BLEContext object from App.js because the App is not a
+ * child of the context -- so I moved the linegraph into it's own component which IS nested
+ * inside of it (see App.js).
+ *
+ * @returns {JSX.Element}
+ * @constructor
+ */
 export const Chart = () => {
   const {sensor, sensorData} = useContext(BLEContext);
 
