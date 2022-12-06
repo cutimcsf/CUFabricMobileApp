@@ -8,7 +8,7 @@ import React, {
 import {BleManager} from 'react-native-ble-plx';
 import {Buffer} from 'buffer';
 
-import {LogBox} from 'react-native';
+import {LogBox, PermissionsAndroid, Platform} from 'react-native';
 LogBox.ignoreLogs(['new NativeEventEmitter']);
 
 export const BLEContext = createContext({
@@ -116,10 +116,32 @@ export const BLEProvider = ({children}) => {
   }, [readSensorValue, time]);
 
   useEffect(() => {
+    // Get android permission for location... this is required
+    // for bluetooth access ...
+    if (Platform.OS === 'android' && Platform.Version >= 23) {
+      PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      ).then(result => {
+        if (result) {
+          console.log('ACCESS_FINE_LOCATION is granted');
+        } else {
+          PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          ).then((result) => {
+            if (result) {
+              console.log('ACCESS_FINE_LOCATION is granted');
+            } else {
+              console.error('User refuse ACCESS_FINE_LOCATION');
+            }
+          });
+        }
+      });
+    }
+
     scanAndConnect();
 
     return () => {
-      console.error("Unmounting context")
+      console.error('Unmounting context');
       if ( sensor ) {
         blemanager.cancelDeviceConnection(sensor.id);
       }
