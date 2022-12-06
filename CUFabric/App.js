@@ -9,7 +9,9 @@
 import React, {useContext, useEffect, useRef, useState} from 'react';
 import type {Node} from 'react';
 import {
-  Dimensions, PermissionsAndroid,
+  Dimensions,
+  PermissionsAndroid,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -27,7 +29,7 @@ import {
   ReloadInstructions,
 } from 'react-native/Libraries/NewAppScreen';
 import {BLEContext, BLEProvider} from './ble-context';
-import {Chart} from "./chart";
+import {Chart} from './chart';
 
 const Section = ({children, title}): Node => {
   const isDarkMode = useColorScheme() === 'dark';
@@ -61,6 +63,30 @@ const App: () => Node = () => {
   const backgroundStyle = {
     backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
   };
+
+  useEffect(() => {
+    // Get android permission for location... this is required
+    // for bluetooth access ...
+    if (Platform.OS === 'android' && Platform.Version >= 23) {
+      PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      ).then(result => {
+        if (result) {
+          console.log('ACCESS_FINE_LOCATION is granted');
+        } else {
+          PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          ).then(result => {
+            if (result) {
+              console.log('ACCESS_FINE_LOCATION is granted');
+            } else {
+              console.error('User refuse ACCESS_FINE_LOCATION');
+            }
+          });
+        }
+      });
+    }
+  });
 
   return (
     <BLEProvider>

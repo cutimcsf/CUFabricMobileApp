@@ -26,7 +26,7 @@ LogBox.ignoreLogs(['new NativeEventEmitter']);
  * at the very end of this source in the BLEProvider's return method
  */
 export const BLEContext = createContext({
-  sensor: Device undefined,
+  sensor: undefined,
   sensorData: [],
 });
 
@@ -224,27 +224,7 @@ export const BLEProvider = ({children}) => {
    * unmounted.
    */
   useEffect(() => {
-    // Get android permission for location... this is required
-    // for bluetooth access ...
-    if (Platform.OS === 'android' && Platform.Version >= 23) {
-      PermissionsAndroid.check(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      ).then(result => {
-        if (result) {
-          console.log('ACCESS_FINE_LOCATION is granted');
-        } else {
-          PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          ).then((result) => {
-            if (result) {
-              console.log('ACCESS_FINE_LOCATION is granted');
-            } else {
-              console.error('User refuse ACCESS_FINE_LOCATION');
-            }
-          });
-        }
-      });
-    }
+
 
     scanAndConnect();
 
