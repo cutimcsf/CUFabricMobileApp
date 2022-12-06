@@ -26,9 +26,6 @@ import {
   LearnMoreLinks,
   ReloadInstructions,
 } from 'react-native/Libraries/NewAppScreen';
-import {
-  LineChart
-} from 'react-native-chart-kit';
 import {BLEContext, BLEProvider} from './ble-context';
 import {Chart} from "./chart";
 
@@ -59,13 +56,11 @@ const Section = ({children, title}): Node => {
 };
 
 const App: () => Node = () => {
-
   const isDarkMode = useColorScheme() === 'dark';
 
   const backgroundStyle = {
     backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
   };
-
 
   return (
     <BLEProvider>
