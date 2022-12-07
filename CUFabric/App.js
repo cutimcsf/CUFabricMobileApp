@@ -68,19 +68,20 @@ const App: () => Node = () => {
     // Get android permission for location... this is required
     // for bluetooth access ...
     if (Platform.OS === 'android' && Platform.Version >= 23) {
+      console.log("Checking for ACCESS_FINE_LOCATION permissions")
       PermissionsAndroid.check(
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       ).then(result => {
         if (result) {
-          console.log('ACCESS_FINE_LOCATION is granted');
+          console.log('ACCESS_FINE_LOCATION is allowed');
         } else {
           PermissionsAndroid.request(
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           ).then(result => {
             if (result) {
-              console.log('ACCESS_FINE_LOCATION is granted');
+              console.log('ACCESS_FINE_LOCATION is allowed');
             } else {
-              console.error('User refuse ACCESS_FINE_LOCATION');
+              console.log('ACCESS_FINE_LOCATION is NOT allowed');
             }
           });
         }

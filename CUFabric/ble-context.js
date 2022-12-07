@@ -11,13 +11,15 @@ import React, {
   createContext,
   useCallback,
   useEffect,
-  useMemo, useRef,
+  useMemo,
+  useRef,
   useState,
 } from 'react';
-import {BleManager} from 'react-native-ble-plx';
+import {BleError, BleManager} from 'react-native-ble-plx';
 import {Buffer} from 'buffer';
 
-import {LogBox, PermissionsAndroid, Platform} from 'react-native';
+import {AppState, LogBox, PermissionsAndroid, Platform} from 'react-native';
+import {append} from 'react-native-svg/lib/typescript/lib/Matrix2D';
 LogBox.ignoreLogs(['new NativeEventEmitter']);
 
 /*
@@ -46,6 +48,9 @@ const blemanager = new BleManager();
  * when the app is rendered.
  */
 export const BLEProvider = ({children}) => {
+  const appState = useRef(AppState.currentState);
+  const [appStateVisible, setAppStateVisible] = useState(appState.current);
+
   /*
    * The discovered sensor object
    */
@@ -76,6 +81,7 @@ export const BLEProvider = ({children}) => {
    * dependencies, so the method is never redefined.
    */
   let scanAndConnect = useCallback(() => {
+    console.log('Starting scanAndConnect');
     // Start scanning for BLE devices -- we don't use any filters, so it'll discover everything in range.
     blemanager.startDeviceScan(null, null, (error, device) => {
       if (error) {
@@ -95,39 +101,81 @@ export const BLEProvider = ({children}) => {
         // Before we can use the device we found, we must (1) connect to it, and
         // (2) discover its services and characteristics. This is time-consuming
         // so we do it here once, rather than each time we need to read a value.
-        console.log('Setting sensor');
+        console.log('Found a device named: ' + device.name);
         blemanager
-          .connectToDevice(device.id)
+          .connectToDevice(device.id, {autoConnect: true})
           .then(d => {
+            console.log(
+              device.name +
+                ' connected, discovering services and characteristics...',
+            );
             // Device is connected, now read the GATT db.
             return blemanager.discoverAllServicesAndCharacteristicsForDevice(
-              d.id,
+              device.id,
             );
           })
           .then(d => {
             // GATT db is read and ready to use ...
             // Store the device in the sensor state object for use later.
-            console.log('Device connected ... ' + d.id);
-            setSensor(d);
+            console.log(device.name + ' is ready for use.');
+            setTimeout(() => setSensor(device), 500);
             return;
           })
           .catch(error => {
             // If any of the above failed, or something unexpected occurred, we'll
             // wind up here in this catch handler ... lets do some cleanup
-            console.error('Uh oh!');
-            blemanager
-              .cancelDeviceConnection(device.id)
-              .then(device => {
-                console.error(error);
-              })
-              .catch(error2 => {
-                console.error(error);
-                console.error(error2);
-              });
+            console.error('An unexpected error occurred in scanAndConnect: ');
+            if (error) {
+              console.error(error);
+            }
+
+            console.error(
+              'Attempting to cancel connection to device if one existed...',
+            );
+            try {
+              blemanager
+                .cancelDeviceConnection(device.id)
+                .then(device => {
+                  if (error) {
+                    console.error(error);
+                  }
+                })
+                .catch(error2 => {
+                  if (error2) {
+                    console.error(error2);
+                  }
+                });
+            } catch (error2) {
+              console.error('Attempt to cancel connection failed.');
+              if (error2 instanceof BleError) {
+                console.error('[' + error2.errorCode + '] ' + error2.reason);
+              }
+            }
+
+            scanAndConnect();
           });
       }
     });
   }, []);
+
+  let appendDataPoint = useCallback(
+    value => {
+      // Straight-lines don't make good demos -- let's record
+      // the sin(value/2) instead.
+      let new1Data = [...sensorData, Math.sin(value / 2)];
+
+      // We only want to accumulate 25 datapoints, and then
+      // start rolling ...
+      if (new1Data.length > 25) {
+        new1Data.shift();
+      }
+
+      // Update the sensorData state object ... this sets off a chain reaction
+      // documented in the 'useEffect' hooks written below.
+      setSensorData(sensorData => new1Data);
+    },
+    [sensorData],
+  );
 
   /**
    * This method obtains the latest value from the sensor and appends it to the list
@@ -142,12 +190,15 @@ export const BLEProvider = ({children}) => {
    * @type {(function(): Promise<number|number>)|*}
    */
   let readSensorValue = useCallback(async () => {
-    console.log('Reading sensor value');
     if (sensor == undefined) {
+      console.error(
+        'Attempt to read sensor value on undefined sensor instance.',
+      );
       return -1;
     }
 
     // Attempt to connect
+    console.log('Attempting to read sensor value.');
     return blemanager
       .readCharacteristicForDevice(
         sensor.id,
@@ -155,6 +206,14 @@ export const BLEProvider = ({children}) => {
         CU_FAB_COUNTER_CHARACTERISTIC,
       )
       .then(characteristic => {
+        console.log(
+          'Read sensor value from service {' +
+            characteristic.serviceUUID +
+            '} and characteristic {' +
+            characteristic.uuid +
+            '}.',
+        );
+
         // Characteristic values are base-64 encoded buffers in the
         // react-native-ble-plx API ... here we're decoding it as a
         // single 8-bit integer, but I didn't actually cross-reference
@@ -163,30 +222,58 @@ export const BLEProvider = ({children}) => {
         // need to decode up to 4 bytes of data from this buffer ... keep
         // in mind there will be an endian mismatch, so you'll need to flip
         // the bytes around and so some bit-shifting if needed.
+        console.log(
+          'Attempting to decode characteristic value as base64 encoded buffer.',
+        );
         let buffer = new Buffer(characteristic.value, 'base64');
+
+        console.log('Buffer has length ' + buffer.length);
         let value = Uint8Array.from(buffer)[0];
 
-        // Straight-lines don't make good demos -- let's record
-        // the sin(value/2) instead.
-        let new1Data = [...sensorData, Math.sin(value / 2)];
+        console.log(
+          'Decoded value ' + value + ' - appending to chart data array.',
+        );
 
-        // We only want to accumulate 25 datapoints, and then
-        // start rolling ...
-        if (new1Data.length > 25) {
-          new1Data.shift();
-        }
-
-        // Update the sensorData state object ... this sets off a chain reaction
-        // documented in the 'useEffect' hooks written below.
-        setSensorData(sensorData => new1Data);
+        appendDataPoint(value);
 
         return value;
       })
       .catch(error => {
-        console.error(error);
-        return -1;
+        console.error('Unexpected error occurred reading sensor value.');
+        if (error instanceof BleError) {
+          console.error('[' + error.errorCode + '] ' + error.reason);
+        }
+
+        console.error(
+          'Attempting to cancel connection to device if one existed...',
+        );
+        try {
+          blemanager
+            .cancelDeviceConnection(device.id)
+            .then(device => {
+              if (error) {
+                console.error(error);
+              }
+            })
+            .catch(error2 => {
+              if (error2) {
+                console.error(error2);
+              }
+            });
+        } catch (error2) {
+          console.error('Attempt to cancel connection failed');
+          if (error2 instanceof BleError) {
+            console.error('[' + error2.errorCode + '] ' + error2.reason);
+          } else {
+            console.error(error);
+          }
+        }
+
+        console.error('Attempting to reset and resume scanning...');
+        setSensor(undefined);
+        scanAndConnect();
       });
-  }, [sensor, sensorData]);
+  }, [appendDataPoint, sensor]);
 
   /*
    * This is a quick helper which wraps an asynchronous 'thenable' method in a timeout
@@ -212,7 +299,9 @@ export const BLEProvider = ({children}) => {
         return value;
       })
       .catch(error => {
-        if (error) console.log(error);
+        if (error) {
+          console.log(error);
+        }
       });
   }, [readSensorValue, time]);
 
@@ -224,13 +313,41 @@ export const BLEProvider = ({children}) => {
    * unmounted.
    */
   useEffect(() => {
+    const bluetoothStateSubscription = blemanager.onStateChange(state => {
+      if (state === 'PoweredOn') {
+        console.log('Bluetooth is available ... starting scan');
+        scanAndConnect();
+        bluetoothStateSubscription.remove();
+      }
+    }, true);
 
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        console.log('App returning to foreground -- calling scanAndConnect');
+        scanAndConnect();
+      } else if (sensor) {
+        console.log(
+          'App moving to background -- attempting to disconnecting from sensor',
+        );
+        try {
+          blemanager.cancelDeviceConnection(sensor.id).then(() => {
+            console.log(
+              'Disconnected from sensor on transition to background.',
+            );
+          });
+        } catch (error) {}
+      }
 
-    scanAndConnect();
+      appState.current = nextAppState;
+      setAppStateVisible(appState.current);
+    });
 
     return () => {
       console.error('Unmounting context');
-      if ( sensor ) {
+      if (sensor) {
         blemanager.cancelDeviceConnection(sensor.id);
       }
     };
